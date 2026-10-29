@@ -21,4 +21,4 @@ Return value:
 
 ## Follow-up
 
-State the cost on the function comment: time `O(n · k log k)`, space `O(n · k)`, where `k` is the length of the longest word. The sorted output above is what the check compares.
+State the cost on the function comment: time `O(n · k(log k + log n))`, space `O(n · k)`, where `k` is the length of the longest word. The extra `log n` is the cost of sorting the groups. The sorted output above is what the check compares.

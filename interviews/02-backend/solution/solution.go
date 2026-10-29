@@ -164,6 +164,17 @@ func main() {
 	decodeErr := json.NewDecoder(rec.Body).Decode(&created)
 	c.report("post-code", rec.Code == http.StatusCreated)
 	c.report("post-job", decodeErr == nil && created.Name == "compile" && strings.HasPrefix(created.ID, "job-") && created.Status == "running")
+	c.report("post-id", created.ID == "job-1")
+
+	req = httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(`{}`))
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	c.report("post-empty", rec.Code == http.StatusBadRequest && rec.Body.String() == "bad request\n")
+
+	req = httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(`not json`))
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	c.report("post-bad-json", rec.Code == http.StatusBadRequest && rec.Body.String() == "bad request\n")
 
 	req = httptest.NewRequest(http.MethodGet, "/jobs/"+created.ID, nil)
 	rec = httptest.NewRecorder()
@@ -182,6 +193,10 @@ func main() {
 	cancel()
 	_, err := store.Get(ctx, created.ID)
 	c.report("canceled", errors.Is(err, context.Canceled))
+	_, err = store.Put(ctx, Job{Name: "later"})
+	c.report("canceled-put", errors.Is(err, context.Canceled))
+	_, err = store.Cancel(ctx, created.ID)
+	c.report("canceled-cancel", errors.Is(err, context.Canceled))
 
 	req = httptest.NewRequest(http.MethodPost, "/jobs/"+created.ID+"/cancel", nil)
 	rec = httptest.NewRecorder()

@@ -20,6 +20,7 @@ Implement the empty methods in `starter.go`.
 - `Put` and `Get` return `fmt.Errorf("store: %w", ctx.Err())` when the context is already cancelled.
 - `POST /jobs` with `{"name":"compile"}` responds `201` and the job JSON. An empty name or bad JSON responds `400`.
 - `GET /jobs/{id}` responds `200` and the job, or `404` with body `not found` when the id is missing. Any other store error responds `500`.
+- The checks require the first id to be `job-1`, HTTP `400` with body `bad request` for an empty name or bad JSON, and `errors.Is(err, context.Canceled)` from `Put`, `Get`, and `Cancel` when the context is already cancelled.
 
 ## Follow-up
 

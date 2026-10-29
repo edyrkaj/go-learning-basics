@@ -8,7 +8,6 @@ import (
 
 // GroupAnagrams groups words that are anagrams of each other.
 // Words inside a group are sorted. Groups are sorted by their first word.
-// Time O(n · k log k), space O(n · k), where k is the length of the longest word.
 // A nil or empty input returns an empty non-nil slice.
 func GroupAnagrams(words []string) [][]string {
 	return nil
