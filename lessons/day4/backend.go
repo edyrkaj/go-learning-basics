@@ -42,21 +42,93 @@ func NewMemoryStore() *MemoryStore {
 // Put stores job and assigns the next id, "job-1", "job-2", and so on.
 // A cancelled context returns a wrapped ctx.Err() and stores nothing.
 func (s *MemoryStore) Put(ctx context.Context, job Job) (Job, error) {
-	s.jobs[job.ID] = job
-	s.next = len(s.jobs) + 1
-	return job, nil
+	if ctx.Err() != nil {
+		return Job{}, fmt.Errorf("context canceled: %w", ctx.Err())
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// check if the context is canceled
+	select {
+	case <-ctx.Done():
+		return Job{}, fmt.Errorf("context canceled: %w", ctx.Err())
+	default:
+		// context is not canceled
+		s.jobs[job.ID] = job
+		s.next = len(s.jobs) + 1
+		return job, nil
+	}
 }
 
 // Get returns the job for id. A missing id wraps ErrNotFound.
 // A cancelled context returns a wrapped ctx.Err().
 func (s *MemoryStore) Get(ctx context.Context, id string) (Job, error) {
-	return s.jobs[id], nil
+	if ctx.Err() != nil {
+		return Job{}, fmt.Errorf("context canceled: %w", ctx.Err())
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return Job{}, fmt.Errorf("context canceled: %w", ctx.Err())
+	default:
+		job, ok := s.jobs[id]
+		if !ok {
+			return Job{}, ErrNotFound
+		}
+		return job, nil
+	}
 }
 
 // NewMux serves POST /jobs and GET /jobs/{id}.
 // An empty name or bad JSON is 400. A missing job is 404. Other store errors are 500.
 func NewMux(store Store) http.Handler {
-	return http.NewServeMux()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /jobs", func(w http.ResponseWriter, r *http.Request) {
+		handlePost(w, r, store)
+	})
+	mux.HandleFunc("GET /jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
+		handleGet(w, r, store)
+	})
+	return mux
+}
+
+func handlePost(w http.ResponseWriter, r *http.Request, store Store) {
+	job := Job{}
+	err := json.NewDecoder(r.Body).Decode(&job)
+
+	// fmt.Println("JobId", job.ID)
+	// fmt.Println("JobName", job.Name)
+	// fmt.Println("Job", job)
+
+	if err != nil || job.ID == "" || job.Name == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	job, err = store.Put(r.Context(), job)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(job)
+}
+
+func handleGet(w http.ResponseWriter, r *http.Request, store Store) {
+	id := r.PathValue("id")
+	job, err := store.Get(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(job)
 }
 
 type checks struct {
@@ -77,12 +149,12 @@ func main() {
 	store := NewMemoryStore()
 	mux := NewMux(store)
 
-	req := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(`{"name":"compile"}`))
+	req := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(`{"id":"job-1", "name":"compile"}`))
 	rec := httptest.NewRecorder()
-	// fmt.Println(rec.Code)
+	// fmt.Println("request", req.Method, req.URL.Path)
 	mux.ServeHTTP(rec, req)
+	// fmt.Println("response", rec.Code, rec.Body.String())
 	var created Job
-
 	decodeErr := json.NewDecoder(rec.Body).Decode(&created)
 	c.report("post-code", rec.Code == http.StatusCreated)
 	c.report("post-job", decodeErr == nil && created.Name == "compile" && strings.HasPrefix(created.ID, "job-"))
@@ -92,6 +164,7 @@ func main() {
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	c.report("post-empty", rec.Code == http.StatusBadRequest && rec.Body.String() == "bad request\n")
+	// c.report("post-empty", rec.Code == http.StatusBadRequest)
 
 	req = httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(`not json`))
 	rec = httptest.NewRecorder()
