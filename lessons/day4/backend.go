@@ -42,13 +42,15 @@ func NewMemoryStore() *MemoryStore {
 // Put stores job and assigns the next id, "job-1", "job-2", and so on.
 // A cancelled context returns a wrapped ctx.Err() and stores nothing.
 func (s *MemoryStore) Put(ctx context.Context, job Job) (Job, error) {
-	return Job{}, nil
+	s.jobs[job.ID] = job
+	s.next = len(s.jobs) + 1
+	return job, nil
 }
 
 // Get returns the job for id. A missing id wraps ErrNotFound.
 // A cancelled context returns a wrapped ctx.Err().
 func (s *MemoryStore) Get(ctx context.Context, id string) (Job, error) {
-	return Job{}, nil
+	return s.jobs[id], nil
 }
 
 // NewMux serves POST /jobs and GET /jobs/{id}.
@@ -77,8 +79,10 @@ func main() {
 
 	req := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(`{"name":"compile"}`))
 	rec := httptest.NewRecorder()
+	// fmt.Println(rec.Code)
 	mux.ServeHTTP(rec, req)
 	var created Job
+
 	decodeErr := json.NewDecoder(rec.Body).Decode(&created)
 	c.report("post-code", rec.Code == http.StatusCreated)
 	c.report("post-job", decodeErr == nil && created.Name == "compile" && strings.HasPrefix(created.ID, "job-"))

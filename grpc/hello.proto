@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package hello;
+
+option go_package = "golearn.com/grpc/hello";
+
+// Greeter is the service contract. protoc compiles this into a Go
+// interface (server) and a stub (client). Field numbers (1, 2, ...)
+// are the binary tags — they stay stable even if you rename fields.
+service Greeter {
+  // Unary: one request, one response.
+  rpc SayHello (HelloRequest) returns (HelloReply);
+
+  // Server streaming: one request, a sequence of responses over HTTP/2.
+  rpc ListGreetings (HelloRequest) returns (stream HelloReply);
+}
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloReply {
+  string message = 1;
+}
